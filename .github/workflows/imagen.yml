@@ -1,0 +1,50 @@
+name: Imagen y evaluación pasiva
+on: [push, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  laboratorio:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Construir imagen local
+        run: |
+          mkdir -p reportes-locales
+          docker compose -f infra/compose.yaml config -q
+          docker compose -f infra/compose.yaml build
+          docker image inspect --format '{{.Id}} {{.Config.User}} {{.Os}}/{{.Architecture}}' solicitudes-internas:lab | tee reportes-locales/identidad-imagen.txt
+      - name: Analizar la imagen con Trivy
+        run: |
+          docker save solicitudes-internas:lab -o "$RUNNER_TEMP/solicitudes.tar"
+          docker run --rm -v "$RUNNER_TEMP/solicitudes.tar:/imagen.tar:ro" -v "$PWD/reportes-locales:/reportes" aquasec/trivy:latest image --input /imagen.tar --scanners vuln --format json --output /reportes/trivy.json --exit-code 0
+          docker run --rm aquasec/trivy:latest --version | tee reportes-locales/trivy-version.txt
+      - name: Iniciar laboratorio local y ejecutar ZAP Baseline
+        run: |
+          docker compose -f infra/compose.yaml up -d --no-build
+          curl --retry 15 --retry-connrefused --fail http://127.0.0.1:8000/
+          chmod a+w reportes-locales
+          set +e
+          bash scripts/zap-baseline.sh
+          zap_status=$?
+          set -e
+          echo "$zap_status" | tee reportes-locales/zap-salida.txt
+          if [ "$zap_status" -eq 2 ]; then
+            echo "::warning::ZAP Baseline reportó advertencias"
+          elif [ "$zap_status" -ne 0 ]; then
+            exit "$zap_status"
+          fi
+      - name: Aplicar umbral de severidad
+        if: always()
+        run: |
+          if [ ! -f reportes-locales/trivy.json ]; then exit 1; fi
+          jq '[.Results[]? | .Vulnerabilities[]? | select(.Severity == "HIGH" or .Severity == "CRITICAL")] | length' reportes-locales/trivy.json | tee reportes-locales/trivy-graves.txt
+          test "$(cat reportes-locales/trivy-graves.txt)" -eq 0
+      - name: Conservar registro de rutas
+        if: always()
+        run: docker compose -f infra/compose.yaml logs --no-color > reportes-locales/uvicorn-ci.log
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evidencias-imagen
+          path: reportes-locales/
