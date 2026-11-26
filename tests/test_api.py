@@ -87,6 +87,7 @@ def test_cabeceras_publicas(lab):
         assert response.status_code == 200
         assert response.headers["Cache-Control"] == "no-store"
         assert response.headers["X-Content-Type-Options"] == "nosniff"
+        assert response.headers["Cross-Origin-Resource-Policy"] == "same-origin"
         assert "frame-ancestors 'none'" in response.headers["Content-Security-Policy"]
 
 

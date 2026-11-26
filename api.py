@@ -50,6 +50,7 @@ def create_app(requester_token: str, supervisor_token: str) -> FastAPI:
         response.headers["Cache-Control"] = "no-store"
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
+        response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
         return response
 
     def authenticate(credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)]) -> Account:
