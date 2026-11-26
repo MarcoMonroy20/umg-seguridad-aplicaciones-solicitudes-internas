@@ -1,0 +1,5 @@
+pytest==9.2.0
+httpx==0.29.0
+pip-audit==2.10.1
+cyclonedx-bom==9.0.0
+semgrep==1.187.0

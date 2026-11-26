@@ -1,0 +1,16 @@
+rules:
+  - id: credencial-de-entorno-con-valor-fijo
+    message: Obtenga la credencial de una configuración externa o genere una aleatoria para el laboratorio.
+    severity: ERROR
+    languages: [python]
+    patterns:
+      - pattern: $ENV.get($NAME, $DEFAULT)
+      - metavariable-regex:
+          metavariable: $ENV
+          regex: ^(os\.)?environ$
+      - metavariable-regex:
+          metavariable: $NAME
+          regex: ^["'](SOLICITANTE|SUPERVISOR)_TOKEN["']$
+      - metavariable-regex:
+          metavariable: $DEFAULT
+          regex: ^["']

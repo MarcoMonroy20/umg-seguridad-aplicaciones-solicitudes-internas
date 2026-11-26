@@ -1,0 +1,39 @@
+name: Controles del laboratorio
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: mkdir -p reportes-locales
+      - run: |
+          python -m pip install --require-hashes -r requirements.txt
+          python -m pip install -r requirements-dev.txt
+      - run: python -m pytest -q --junitxml=reportes-locales/pytest.xml
+      - run: |
+          semgrep --test semgrep/
+          semgrep scan --metrics=off --config semgrep/reglas.yaml --error --json --output reportes-locales/semgrep.json api.py
+      - run: |
+          pip-audit --disable-pip --no-deps --require-hashes -r requirements.txt --format json -o reportes-locales/pip-audit.json
+      - run: cyclonedx-py requirements requirements.txt --output-reproducible --sv 1.6 -o reportes-locales/sbom.cdx.json
+      - uses: open-policy-agent/setup-opa@v2
+        with:
+          version: '1.0.0'
+      - run: |
+          opa test politica -v
+          opa eval --fail --data politica/compose.rego --input infra/compose.yaml 'data.laboratorio.permit'
+      - run: |
+          docker build -t solicitudes-internas:lab .
+          docker compose -f infra/compose.yaml up -d --no-build
+          curl --retry 10 --retry-connrefused --fail http://127.0.0.1:8000/
+          python scripts/pasivo.py > reportes-locales/http-pasivo.json
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evidencias-seguridad
+          path: reportes-locales/
