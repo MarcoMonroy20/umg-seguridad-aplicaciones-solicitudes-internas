@@ -30,7 +30,15 @@ jobs:
       - run: |
           docker build -t solicitudes-internas:lab .
           docker compose -f infra/compose.yaml up -d --no-build
-          curl --retry 10 --retry-connrefused --fail http://127.0.0.1:8000/
+          ready=false
+          for attempt in {1..20}; do
+            if curl --silent --fail --max-time 2 http://127.0.0.1:8000/; then ready=true; break; fi
+            sleep 0.5
+          done
+          if [ "$ready" != true ]; then
+            docker compose -f infra/compose.yaml logs --no-color
+            exit 1
+          fi
           python scripts/pasivo.py > reportes-locales/http-pasivo.json
       - if: always()
         uses: actions/upload-artifact@v4
